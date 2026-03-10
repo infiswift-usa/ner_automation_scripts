@@ -20,6 +20,18 @@ __pycache__/
 *.pyo
 *.pyd
 
+inspection.json
+maxifit-automation.mp4
+docs-japanese.pdf
+
+run_pure_pysam.py
+temp-data.pdf
+モジュール配置図_RP-0007-SL03-00_Mie Fukuo.pdf
+モジュール配置図_RP-0039-SL01-00_Mie Tsu.pdf
+モジュール配置図_RP-0040-SL01-00_Kagoshima iriki.pdf
+モジュール配置図_RP-0042-SL01-00_Nagano.pdf
+簡易シミュレーター.xlsx
+test_integrated_system.py
 # VS Code
 .vscode/
 
