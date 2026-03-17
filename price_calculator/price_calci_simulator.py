@@ -7,7 +7,6 @@ class SolarSimulator:
         self.reference_prices = {}
         self.balancing_costs = [0.0] * 20
         self.ppa_prices = {}
-        #self.non_fossil_value = 0.6
         
         try:
             with open(config_file, 'r', encoding='utf-8') as f:
@@ -24,7 +23,6 @@ class SolarSimulator:
 
     def run_simulation(self, params):
         fit_remaining_months = 20 * 12 - self.month_diff(params['op_start_date'], params['mod_date'])
-        
         base_price_a = (params['fit_price'] * params['ex_dc'] + 
                         params['latest_price'] * (params['rep_dc'] - params['ex_dc'])) / params['rep_dc']
         
@@ -32,7 +30,6 @@ class SolarSimulator:
         
         # Override with parameter non_fossil_value if provided, otherwise use extracted config
         non_fossil_val_c = params.get('non_fossil_value', self.non_fossil_value)
-        
         ppa_price = self.ppa_prices.get(params['region'], 14.0)
         
         results = []
@@ -40,11 +37,11 @@ class SolarSimulator:
         gen_kwh = params['rep_yield']
         
         for year in range(1, 21):
-            # Safe boundary check for balancing costs list
+            # Safe boundary check: if length becomes more -default to 0.30
             bal_cost_d = self.balancing_costs[year - 1] if (year - 1) < len(self.balancing_costs) else 0.30
             
-            fip_premium = base_price_a - ref_price_b - non_fossil_val_c + bal_cost_d
-            #to verify: fip_premium = 27.23008274 - 8.540559352 - 0.6 + bal_cost_d ---> gives same value
+            fip_premium = base_price_a - ref_price_b - non_fossil_val_c + bal_cost_d 
+            #fip_premium = 27.23008274 - 8.540559352 - 0.6 + bal_cost_d #---> gives same value
             months_at_end_of_year = year * 12
             months_at_start_of_year = (year - 1) * 12
             
@@ -52,7 +49,7 @@ class SolarSimulator:
                 sell_price = ppa_price + fip_premium
             elif months_at_start_of_year < fit_remaining_months:
                 fip_months = fit_remaining_months - months_at_start_of_year
-                non_fip_months = 12 - fip_months
+                non_fip_months = months_at_end_of_year-fit_remaining_months
                 sell_price = ((ppa_price + fip_premium) * fip_months + ppa_price * non_fip_months) / 12.0
             else:
                 sell_price = ppa_price
@@ -97,7 +94,7 @@ if __name__ == "__main__":
         'ex_dc': 1127.80,
         'rep_ac': 1000.00,
         'rep_dc': 1421.28,
-        'ex_yield': 1433741.0,   # Placeholder info from previous extraction
+        'ex_yield': 1433741.0,   
         'rep_yield': 2182388.74, # Year 1 Generation input
         'ex_deg': 0.007,
         'rep_deg': 0.004,
@@ -105,8 +102,7 @@ if __name__ == "__main__":
         'latest_price': 8.9,
         'op_start_date': datetime(2016, 8, 31),
         'mod_date': datetime(2025, 7, 31),
-        # Using the json-based fallback for NF Value (c)
-        # 'non_fossil_value': 0.6 
+
     }
     
     print("\n--- Project Inputs ---")

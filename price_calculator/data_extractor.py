@@ -61,7 +61,6 @@ def update_jepx_excel(jepx_rows: list, wb: openpyxl.Workbook) -> None:
 
     # Collect existing dates to avoid duplicates.
     # Normalize to "M/D/YYYY" string regardless of how openpyxl returns the value
-    # (it may be a datetime object OR a plain string depending on cell formatting).
     def _to_date_str(val) -> str | None:
         if val is None:
             return None
@@ -80,15 +79,15 @@ def update_jepx_excel(jepx_rows: list, wb: openpyxl.Workbook) -> None:
         if ds:
             existing.add(ds)
         cur += 1
-
-    # Write new rows
+    
     vol_col   = start_col + 4   # 約定総量
     price_col = start_col + 5   # 約定価格
     avg_col   = start_col + 12  # 加重平均値
 
+    # Write new rows
     for row_data in jepx_rows:
         # row_data[3] is already a M/D/YYYY string after process_jepx_csv
-        date_str = str(row_data[3])          # e.g. "3/5/2025"
+        date_str = str(row_data[3]) 
         if date_str in existing:
             continue
 
@@ -110,7 +109,6 @@ def update_jepx_excel(jepx_rows: list, wb: openpyxl.Workbook) -> None:
         print(f"  [JEPX] Added row {cur}: {date_str}")
         existing.add(date_str)
         cur += 1
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 2.  OCCTO ── Update Excel sheet with new 参照価格 data
@@ -135,21 +133,12 @@ def process_occto_csv(file_path: str) -> pd.DataFrame:
     solar["month"] = solar["date"].dt.month
     return solar
 
-
 def _find_row_containing(sheet, col: int, text: str, stop: int = 300) -> int | None:
     for r in range(1, stop):
         v = sheet.cell(r, col).value
         if v and str(text) in str(v):
             return r
     return None
-
-
-def _find_region_row(sheet, region: str, start: int) -> int | None:
-    for r in range(start + 1, start + 15):
-        if sheet.cell(r, 1).value == region:
-            return r
-    return None
-
 
 def update_occto_excel(occto_df: pd.DataFrame, wb: openpyxl.Workbook) -> None:
     sheet = wb["算出根拠"]
@@ -158,6 +147,7 @@ def update_occto_excel(occto_df: pd.DataFrame, wb: openpyxl.Workbook) -> None:
     for year in occto_df["year"].unique():
         start_row = _find_row_containing(sheet, 1, f"{year}年度")
 
+        # year is retreived from filename. if we dont find the row with year - it means we need to create new table
         if start_row is None:
             prev = _find_row_containing(sheet, 1, f"{year-1}年度")
             start_row = (prev + 12) if prev else (sheet.max_row + 2)
@@ -176,9 +166,16 @@ def update_occto_excel(occto_df: pd.DataFrame, wb: openpyxl.Workbook) -> None:
                 col_map[int(h.replace("月","").strip())] = c
             elif "年度平均" in h:
                 avg_col = c
+        
+        region_row_map={}
+        for r in range(start_row+1,start_row+15):
+            val=sheet.cell(r,1).value
+            if val in regions:
+                region_row_map[val]=r
 
+        #fill in table . if year doesnt exist above snippet adds structure.if it exists, below snippet fills in cells
         # Find first empty month column
-        first_reg_row = _find_region_row(sheet, "北海道", start_row)
+        first_reg_row = start_row + 1
         target_col = None
         if first_reg_row:
             for m, c in col_map.items():
@@ -191,9 +188,11 @@ def update_occto_excel(occto_df: pd.DataFrame, wb: openpyxl.Workbook) -> None:
             year_data = occto_df[occto_df["year"] == year]
             for m, c in col_map.items():
                 if c >= target_col:
+                    month_data=year_data[year_data["month"]==m]
+
                     for _, row in year_data.iterrows():
                         if row["month"] == m:
-                            reg_row = _find_region_row(sheet, row["エリア"], start_row)
+                            reg_row=region_row_map.get(row["エリア"])
                             if reg_row:
                                 sheet.cell(reg_row, c, value=row["参照価格"])
 
@@ -214,22 +213,28 @@ def update_occto_excel(occto_df: pd.DataFrame, wb: openpyxl.Workbook) -> None:
 # 3.  AI EXTRACTION ── Use Gemini to read tables from the workbook
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _sheet_to_text(wb: openpyxl.Workbook, sheet_name: str, max_row=120, max_col=32) -> str:
+'''def _sheet_to_text(wb: openpyxl.Workbook, sheet_name: str) -> str:
     """Dump the sheet to a compact CSV-like text for the LLM."""
     sheet = wb[sheet_name]
     lines = []
-    for r in range(1, min(sheet.max_row, max_row) + 1):
+    for r in range(1, sheet.max_row + 1):
         cells = []
         has_data = False
-        for c in range(1, min(sheet.max_column, max_col) + 1):
+        for c in range(1, sheet.max_column + 1):
             v = sheet.cell(r, c).value
             cells.append("" if v is None else str(v))
             if v is not None:
                 has_data = True
         if has_data:
             lines.append(",".join(cells))
-    return "\n".join(lines)
+    
+    return "\n".join(lines)'''
 
+def _sheet_to_text(wb:openpyxl.Workbook,sheet_name:str)->str:
+    #dump sheet into compact CSV like text for LLM using pandas
+    df=pd.DataFrame(wb[sheet_name].values)
+    df=df.dropna(how="all",axis=0).dropna(how="all",axis=1) #only drops row/column that are 100% empty
+    return df.to_csv(index=False,header=False)
 
 def extract_config_with_ai(wb: openpyxl.Workbook) -> dict:
     """
@@ -237,39 +242,28 @@ def extract_config_with_ai(wb: openpyxl.Workbook) -> dict:
       - b.参照価格 per region (2020-2024 average excluding 2022)
       - c.非化石価値相当額 = 加重平均値 from the LAST data row of the JEPX table
       - d.バランシングコスト list (20 values, one per year 2026-2045)
+      - ⑤PPA単価
     Returns a clean dict.
     """
     print("  [AI] Dumping sheet to text for Gemini…")
     sheet_text = _sheet_to_text(wb, "算出根拠")
-
     prompt = f"""
     You are a data extraction assistant. Below is a raw CSV dump of a Japanese Excel worksheet called 「算出根拠」.
 
     Your task: Return a single valid JSON object with exactly these keys:
 
-    1. "reference_prices": dict mapping each Japanese region name to its float value from the column header
-       "2020-2024平均(2022年度除く)". The regions are:
-       北海道, 東北, 東京, 中部, 北陸, 関西, 中国, 四国, 九州
-       (This is the "b.参照価格" summary table at the top of the sheet, rows 2-12.)
+    1."reference_prices":dict mapping each Japanese region name to its float value from the column header "2020-2024平均(2022年度除く)". (From the b.参照価格 table)
+    2. "non_fossil_value": float - the final numeric value (加重平均値) from the VERY LAST data row of the JEPX table under "c.非化石価値相当額".
+    3. "balancing_costs":list if floates - the numeric values from the d.バランシングコスト column.
+    4. "ppa_prices": dict mapping each region name to its float value STRICTLY UNDER the table "⑤PPA単価" (e.g., {{"北海道": 14.0, "東京": 14.5}}).
 
-    2. "non_fossil_value": float — the 加重平均値 from the VERY LAST data row of the JEPX table
-       (the table under "c.非化石価値相当額" heading, which lists 非FIT(再エネ指定) auction records).
-       The 加重平均値 is a rolling weighted-average price column.  Take the value from the final
-       non-empty row only.
-
-    3. "balancing_costs": list of 20 floats — the d.バランシングコスト column values,
-       in order from year 2026 to 2045 (or year 1 to 20 of the simulation).
-
-    Return ONLY the JSON object. No explanation, no markdown fences.
+    Return ONLY the JSON object. No explanation, no markdown fences. Do not include markdown formatting like ```json.
 
     Sheet data:
     {sheet_text}
     """
 
-    resp = client.models.generate_content(
-        model="gemini-3-flash-preview",
-        contents=prompt,
-    )
+    resp = client.models.generate_content(model="gemini-3-flash-preview",contents=prompt)
     raw = resp.text.strip()
 
     # Strip any accidental markdown fences
@@ -288,12 +282,8 @@ def extract_config_with_ai(wb: openpyxl.Workbook) -> dict:
     print(f"  [AI] Extracted reference_prices: {list(data.get('reference_prices',{}).keys())}")
     print(f"  [AI] non_fossil_value = {data.get('non_fossil_value')}")
     print(f"  [AI] balancing_costs ({len(data.get('balancing_costs',[]))} values)")
+    print(f"  [AI] Extracted ppa_prices: {list(data.get('ppa_prices',{}).keys())}")
     return data
-
-
-def build_ppa_prices(reference_prices: dict, default: float = 14.0) -> dict:
-    """PPA price per region — currently a single fixed value per region."""
-    return {region: default for region in reference_prices}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -312,27 +302,32 @@ def run_extractor(
 
     # ── Load workbook (with formulas so we can write)
     wb = openpyxl.load_workbook(excel_path)
-
+    update_needed=False
     # ── Update JEPX section
-    if os.path.exists(jepx_csv):
-        print(f"\n>>> Updating JEPX from {jepx_csv}")
-        rows = process_jepx_csv(jepx_csv)
-        update_jepx_excel(rows, wb)
-    else:
-        print(f"[SKIP] {jepx_csv} not found — JEPX section not updated.")
+    if update_needed:
+        if os.path.exists(jepx_csv):
+            print(f"\n>>> Updating JEPX from {jepx_csv}")
+            rows = process_jepx_csv(jepx_csv)
+            update_jepx_excel(rows, wb)
+        else:
+            print(f"[SKIP] {jepx_csv} not found — JEPX section not updated.")
 
-    # ── Update OCCTO section
-    if os.path.exists(occto_csv):
-        print(f"\n>>> Updating OCCTO from {occto_csv}")
-        occto_df = process_occto_csv(occto_csv)
-        update_occto_excel(occto_df, wb)
-    else:
-        print(f"[SKIP] {occto_csv} not found — OCCTO section not updated.")
+    if update_needed:
+        # ── Update OCCTO section
+        if os.path.exists(occto_csv):
+            print(f"\n>>> Updating OCCTO from {occto_csv}")
+            occto_df = process_occto_csv(occto_csv)
+            update_occto_excel(occto_df, wb)
+        else:
+            print(f"[SKIP] {occto_csv} not found — OCCTO section not updated.")
 
     # ── Save the updated workbook so formulas are stored
     try:
-        wb.save(excel_path)
-        print(f"\n>>> Saved updated workbook: {excel_path}")
+        if update_needed:
+            wb.save(excel_path)
+            print(f"\n>>> Saved updated workbook: {excel_path}")
+        else:
+            print("update_needed is turned off -- continuing without updating data")
     except PermissionError:
         print(
             "\n[ERROR] Cannot save Excel file — it is currently open in Excel.\n"
@@ -344,7 +339,7 @@ def run_extractor(
     # NOTE: cached values are from the last time Excel opened and saved the file.
     # For formula results to be fresh, open and save the file in Excel once, THEN run this.
     # Alternatively, Gemini reads the raw data directly from the formula-version sheet (more reliable).
-    wb_for_ai = openpyxl.load_workbook(excel_path, data_only=False)
+    wb_for_ai = openpyxl.load_workbook(excel_path, data_only=True)
 
     # ── Use Gemini AI to extract the config
     print("\n>>> Asking Gemini AI to extract config from sheet…")
@@ -360,7 +355,7 @@ def run_extractor(
         "reference_prices": ai_data["reference_prices"],
         "non_fossil_value": ai_data["non_fossil_value"],
         "balancing_costs":  ai_data["balancing_costs"],
-        "ppa_prices":       build_ppa_prices(ai_data["reference_prices"]),
+        "ppa_prices":       ai_data["ppa_prices"],
     }
 
     with open(json_out, "w", encoding="utf-8") as f:
