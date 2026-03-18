@@ -32,7 +32,7 @@ class ProjectInfo(BaseModel):
     
     raw_location_text: str = Field(..., description="Extract the exact location string written in the bottom right corner of the drawing (e.g., '-三重県津市-').")
     prefecture: str = Field(..., description="Extract just the prefecture name from the location text (e.g., '三重県').")
-    subregion: str = Field(..., description="Extract the city/ward name from the location text in right bottom,(e.g., in '三重県津市', '津市' is subregion).")
+    subregion: str = Field(..., description="Extract the core city, town, or village name. IGNORING and STRIPPING OFF the prefecture, the district name , or trailing suffix . Examples: '長野県上伊那郡飯島町' -> '飯島'. '三重県津市' -> '津'. '鹿児島県薩摩川内市' -> '薩摩川内'.")
 
 class SolarModuleSpec(BaseModel):
     model_number: str = Field(..., description="Model number of the solar module (e.g., 'NER132M625E-NGD')")
@@ -189,8 +189,9 @@ def _normalize_project_name(raw_name: str) -> str:
 # RUN
 # ==========================================
 if __name__ == "__main__":
-    pdf_file_path = r"D:\VS_CODE\Infiswift\モジュール配置図_RP-0039-SL01-00_Mie Tsu.pdf"
+    pdf_file_path = r"D:\VS_CODE\Infiswift\モジュール配置図_RP-0040-SL01-00_Kagoshima iriki.pdf"
     output_dir = Path(r"D:\VS_CODE\Infiswift\maxifit_output")
+    manifest=Path("D:/VS_CODE/Infiswift/pdf_extraction/manifest.csv")
 
     if os.path.exists(pdf_file_path):
         initial_input = {
@@ -210,13 +211,32 @@ if __name__ == "__main__":
             extracted_json=final_state["structured_data"]
             project_name = _normalize_project_name(extracted_json["project_information"]["project_name"])
             
+            raw_pref = extracted_json["project_information"]['prefecture']
             raw_subreg=extracted_json["project_information"]["subregion"]
             mapped_subreg=raw_subreg
 
-            for key,val in subregion_map.items(): # map subregion in pdf to value maxifit needs
-                if key in raw_subreg:
-                    mapped_subreg=val
-                    break
+            try:
+                df_manifest=pd.read_csv(manifest,encoding='utf-8')
+                # Filter handling both directions (e.g., CSV="北海道(宗谷)" vs raw="北海道", or CSV="東京" vs raw="東京都")
+                valid_ar=df_manifest[df_manifest['area'].str.contains(raw_pref,na=False)| df_manifest['area'].apply(lambda x: str(x) in raw_pref)]
+                valid_pnt=valid_ar['point'].unique()
+
+                # Step 1: Dynamic Match - is the valid point inside the extracted string? (e.g. "津" inside "津市")
+                for point in valid_pnt:
+                    if point in raw_subreg:
+                        mapped_subreg=point
+                        print("success")
+                        break
+
+                # Step 2: Fallback Override - use dictionary if dynamic match failed
+                if mapped_subreg==raw_subreg:
+                    for key,val in subregion_map.items(): # map subregion in pdf to value maxifit needs
+                        if key in raw_subreg:
+                            mapped_subreg=val
+                            print("failed")
+                            break
+            except Exception as e:
+                print(f"⚠️ Warning: Dynamic subregion matching failed ({e}).")
 
             flat_pv_arrays=[]
             for area in extracted_json["area_breakdown"]:
@@ -243,7 +263,7 @@ if __name__ == "__main__":
                     "overwrite_existing": False
                 }
             }
-            json_save=Path(r"D:\VS_CODE\Infiswift\maxifit_automation")
+            json_save=Path(r"D:\VS_CODE\Infiswift\pdf_extraction")
             json_filename = json_save / f"{project_name}_extracted.json"
             with open(json_filename, "w", encoding="utf-8") as f:
                 json.dump(maxifit_payload, f, indent=4, ensure_ascii=False)

@@ -28,7 +28,7 @@
         }
     ],
     "output_files": {
-        "output_directory": "D:\\VS_CODE\\Infiswift\\pdf_extraction",
+        "output_directory": "D:\\VS_CODE\\Infiswift\\maxifit_output",
         "csv_filename": "MAXIFIT_csv_output_Nagano",
         "print_filename": "MAXIFIT_output_print_Nagano",
         "config_filename": "MAXIFITconfig_Nagano",
