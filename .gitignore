@@ -12,7 +12,7 @@ metpv_automation.zip
 
 # Ignore large data files (optional - comment out if you want them tracked)
 # *.csv
-excel_to_sql.py
+
 maxifit_output/
 # Python cache
 __pycache__/

@@ -4,7 +4,7 @@ from datetime import datetime
 from sqlalchemy import create_engine
 
 class SolarSimulator:
-    def __init__(self, config_file, db_url):
+    def __init__(self, db_url):
         self.engine=create_engine(db_url)
         #default fallback incase we hit db error
         self.reference_prices = {}
@@ -110,11 +110,11 @@ class SolarSimulator:
         
         return df, summary
 
-def run_simulation_pipeline(user_inputs: dict, config_dict: dict = None) -> tuple:
+def run_simulation_pipeline(user_inputs: dict) -> tuple:
     print("Initializing Solar Simulator with extracted config...")
     config_dict=r"price_calculator\simulator_config.json"
     db_url="mysql+mysqlconnector://root:params1812@localhost:3306/priceCalci"
-    sim = SolarSimulator(config_dict,db_url)
+    sim = SolarSimulator(db_url)
     
     print("\n--- Project Inputs ---")
     for k, v in user_inputs.items():
