@@ -2,6 +2,10 @@ import os
 import json
 import base64
 from pathlib import Path
+# Workaround: Hugging Face Hub uses symlinks by default; Windows without Developer Mode fails.
+# Set before any huggingface/docling imports to reduce cache errors on Windows.
+if "HF_HUB_DISABLE_SYMLINKS_WARNING" not in os.environ:
+    os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 import io
 from typing import TypedDict, List, Optional, Dict, Any
 from dotenv import load_dotenv
