@@ -1,0 +1,18 @@
+{
+    "user_inputs" : {
+        "region": "中部",
+        "ex_ac": 1000.00,
+        "ex_dc": 1127.80,
+        "rep_ac": 1000.00,
+        "rep_dc": 1421.28, 
+        "ex_yield": 1433741.0,   
+        "rep_yield": 2182388.74, 
+        "ex_deg": 0.007,
+        "rep_deg": 0.004,
+        "fit_price": 32.0,
+        "latest_price": 8.9,
+        "op_start_date": "2016-08-31",
+        "mod_date": "2025-07-31"
+
+    }
+}
