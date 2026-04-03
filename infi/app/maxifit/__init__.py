@@ -1,1 +1,0 @@
-"""maxifit simulation"""
