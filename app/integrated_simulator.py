@@ -37,7 +37,7 @@ def run_integration_pipeline(pdf_path: str, user_inputs_json: str = None):
     print("="*60)
 
     # 1. Tell the code exactly where to save the JSON file
-    json_output_dir = BASE_DIR / "document_extraction"
+    json_output_dir = BASE_DIR / "specs"
     
     # 2. Run the extraction using the new arguments!
     print(f"Sending {target_pdf.name} to the Docling/Gemini Extractor...")

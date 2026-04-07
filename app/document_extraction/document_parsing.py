@@ -356,7 +356,7 @@ if __name__ == "__main__":
         "-o",
         "--output",
         type=Path,
-        default=Path("outputs") / "document_extraction",
+        default=Path("output") / "document_extraction",
         help="Directory for extracted JSON and MaxiFit output_files paths (created if missing).",
     )
     args = parser.parse_args()
